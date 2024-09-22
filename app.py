@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 import os
 from flask_cors import CORS
 from functools import lru_cache
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 load_dotenv()
 app = Flask(__name__)
@@ -13,6 +16,13 @@ NOTION_API_KEY = os.getenv('NOTION_API_KEY')
 DATABASE_ID = os.getenv('DATABASE_ID')
 IMAGES_PER_PAGE = 15
 INITIAL_IMAGES = IMAGES_PER_PAGE // 2  # Load half the images initially
+
+# Email configuration
+SMTP_SERVER = 'smtp.gmail.com'
+SMTP_PORT = 587
+SMTP_USERNAME = os.getenv('SENDER')
+SMTP_PASSWORD = os.getenv('PASSWORD')
+RECIPIENT_EMAIL = os.getenv('RECIPIENTS')
 
 # Dictionary to store processed entry IDs and cursors for each session
 sessions = {}
@@ -99,6 +109,37 @@ def get_images():
         import traceback
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
+
+@app.route('/send_email', methods=['POST'])
+def send_email():
+    try:
+        name = request.form.get('name')
+        email = request.form.get('email')
+        message = request.form.get('message')
+
+        if not all([name, email, message]):
+            return jsonify({"error": "Missing required fields"}), 400
+
+        # Create the email content
+        subject = f"New contact form submission from {name}"
+        body = f"Name: {name}\nEmail: {email}\n\nMessage:\n{message}"
+
+        msg = MIMEMultipart()
+        msg['From'] = SMTP_USERNAME
+        msg['To'] = RECIPIENT_EMAIL
+        msg['Subject'] = subject
+        msg.attach(MIMEText(body, 'plain'))
+
+        # Send the email
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USERNAME, SMTP_PASSWORD)
+            server.send_message(msg)
+
+        return jsonify({"message": "Email sent successfully"}), 200
+    except Exception as e:
+        print(f"Error sending email: {str(e)}")
+        return jsonify({"error": "Failed to send email"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
